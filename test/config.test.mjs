@@ -49,7 +49,7 @@ test('partial work hours keep defaults for missing parts', () => {
 });
 
 test('each key rejects bad values', () => {
-  const bad = { categories: [], nudgeEveryMinutes: 0, maxTasks: 10, quiet: 'yes', carryOver: 1 };
+  const bad = { categories: [], nudgeEveryMinutes: 0, maxTasks: 0, quiet: 'yes', carryOver: 1 };
   const { config, warnings } = normalizeConfig(bad);
   assert.deepEqual(config, defaultConfig);
   assert.equal(warnings.length, 5);
@@ -68,6 +68,21 @@ test('nudgeEveryMinutes above a day is capped at 1440, so the plist integer stay
     warnings: [],
   });
   assert.equal(normalizeConfig({ nudgeEveryMinutes: 1 }).config.nudgeEveryMinutes, 1);
+});
+
+test('maxTasks has no upper bound: any integer >= 1 is accepted', () => {
+  const { config, warnings } = normalizeConfig({ maxTasks: 12 });
+  assert.equal(config.maxTasks, 12);
+  assert.deepEqual(warnings, []);
+});
+
+test('maxTasks rejects 0, non-integers, and non-numbers', () => {
+  for (const v of [0, 1.5, 'lots']) {
+    const { config, warnings } = normalizeConfig({ maxTasks: v });
+    assert.equal(config.maxTasks, defaultConfig.maxTasks, String(v));
+    assert.equal(warnings.length, 1, String(v));
+    assert.match(warnings[0], /^Ignored maxTasks/);
+  }
 });
 
 test('non-object config uses defaults with one warning', () => {

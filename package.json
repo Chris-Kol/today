@@ -1,6 +1,6 @@
 {
   "name": "today",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Claude Code plugin: name your must-dos each morning, get nudged, earn a streak. Rewards intent kept, not tokens burned.",
