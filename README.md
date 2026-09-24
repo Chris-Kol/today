@@ -70,7 +70,7 @@ Every key is optional. Put the ones you want in `~/.today/config.json`:
 | `categories` | `["company", "dx"]` | Sets the categories a must-do can take |
 | `workHours` | `09:00` to `18:00`, days `1`-`5` | Sets when nudges run. Days go from 1 (Monday) to 7 (Sunday) |
 | `nudgeEveryMinutes` | `45` | Sets the gap between nudges |
-| `maxTasks` | `3` | Caps must-dos per day, from 1 to 9 |
+| `maxTasks` | `3` | Caps must-dos per day, 1 or more |
 | `quiet` | `false` | Skips the done animation when `true` |
 | `carryOver` | `true` | Moves unfinished must-dos to the next day |
 

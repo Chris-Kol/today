@@ -23,7 +23,7 @@ const valid = {
     v.days.length > 0 &&
     v.days.every(d => Number.isInteger(d) && d >= 1 && d <= 7),
   nudgeEveryMinutes: v => Number.isInteger(v) && v > 0,
-  maxTasks: v => Number.isInteger(v) && v >= 1 && v <= 9,
+  maxTasks: v => Number.isInteger(v) && v >= 1,
   quiet: v => typeof v === 'boolean',
   carryOver: v => typeof v === 'boolean',
 };

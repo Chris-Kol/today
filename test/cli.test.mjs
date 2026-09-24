@@ -60,7 +60,8 @@ test('docs/voice.md is linked from README', () => {
 test('plugin manifest points at files that exist', () => {
   const plugin = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
   assert.equal(plugin.name, 'today');
-  assert.equal(plugin.version, '0.1.0');
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.equal(plugin.version, pkg.version);
   for (const p of [plugin.commands, plugin.hooks]) {
     assert.match(p, /^\.\//);
     assert.ok(fs.existsSync(path.join(root, p)), p);
