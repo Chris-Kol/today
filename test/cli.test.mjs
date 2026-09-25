@@ -115,7 +115,8 @@ test('doctor prints a config warning once and reports corrupt state', () => {
   const r = doctor([], { 'config.json': '{"maxTasks":"lots","quiet":true}', 'state.json': '{ broken' });
   assert.equal(r.stdout.match(/Ignored maxTasks/g).length, 1);
   assert.match(r.stdout, /^ {2}Read .*config\.json\.$/m);
-  assert.match(r.stdout, /^ {2}Moved your unreadable plan to .*state\.json\.bak-/m);
+  assert.match(r.stdout, /^ {2}Ignored maxTasks in config\.json\.\n {2}Using up to 3 must-dos\.$/m);
+  assert.match(r.stdout, /^Check saved plan\n {2}Started fresh\.\n {2}Saved a backup of your old plan\.$/m);
   assert.equal(fs.readdirSync(r.dir).filter(f => f.startsWith('state.json.bak-')).length, 1);
   assert.match(doctor([], { 'state.json': '{"date":null,"tasks":[]}' }).stdout, /^ {2}Read .*state\.json\.$/m);
 });
@@ -123,11 +124,11 @@ test('doctor prints a config warning once and reports corrupt state', () => {
 test('doctor does not claim to read an unparseable config', () => {
   const r = doctor([], { 'config.json': '{' });
   assert.doesNotMatch(r.stdout, /Read .*config\.json/);
-  assert.match(r.stdout, /^Check settings\n {2}Can't read config\.json\. Using defaults\.$/m);
+  assert.match(r.stdout, /^Check settings\n {2}Can't read config\.json\.\n {2}Using defaults\.$/m);
 });
 
 test('doctor text passes voice-check and each line starts with a verb', () => {
-  const VERBS = ['Check', 'Found', 'Using', 'Read', 'Moved', 'Ignored', "Can't", 'Install', 'Use'];
+  const VERBS = ['Check', 'Found', 'Using', 'Read', 'Started', 'Saved', 'Ignored', "Can't", 'Install', 'Use'];
   const outputs = [
     doctor().stdout,
     doctor(['osascript'], { 'config.json': '{"maxTasks":0}', 'state.json': 'x' }).stdout,
@@ -320,23 +321,25 @@ test('concurrent reads of a corrupt state move only the bad file, once', async (
     const baks = fs.readdirSync(dir).filter(f => f.startsWith('state.json.bak-'));
     assert.equal(baks.length, 1, `run ${i}: ${baks}`);
     assert.equal(fs.readFileSync(path.join(dir, baks[0]), 'utf8'), '{ broken');
-    assert.match(inHome(dir)('status').stdout, new RegExp(`^Moved your unreadable plan to .*${baks[0]}\\.$`, 'm'));
+    const shown = JSON.parse(inHome(dir)('status', '--json').stdout);
+    assert.deepEqual(shown.notices, ['Started fresh.\nSaved a backup of your old plan.']);
+    assert.equal(shown.backup, path.join(dir, baks[0]));
   }
 });
 
 test('doctor shows the corrupt-state notice, and the next command does not repeat it', () => {
   const dir = workHome({ 'state.json': '{ broken' });
   const cli = inHome(dir);
-  assert.match(cli('doctor').stdout, /^ {2}Moved your unreadable plan to /m);
-  assert.doesNotMatch(cli('status').stdout, /Moved/);
+  assert.match(cli('doctor').stdout, /^ {2}Saved a backup of your old plan\.$/m);
+  assert.doesNotMatch(cli('status').stdout, /backup/);
 });
 
 test('scenario: corrupt state read by statusline, the next command shows the notice once', () => {
   const cli = inHome(workHome({ 'state.json': '{ broken' }));
   assert.equal(cli('statusline').stdout, '');
   assert.equal(cli('statusline').stdout, '@ plan your must-dos: /today:plan · streak 0\n');
-  assert.match(cli('status').stdout, /^Moved your unreadable plan to .*state\.json\.bak-/m);
-  assert.doesNotMatch(cli('status').stdout, /Moved/);
+  assert.match(cli('status').stdout, /^Started fresh\.\nSaved a backup of your old plan\.$/m);
+  assert.doesNotMatch(cli('status').stdout, /backup/);
 });
 
 test('state with a bad stage, streak or best is moved aside, and status and statusline still work', () => {
@@ -370,12 +373,45 @@ test('state with a bad stage, streak or best is moved aside, and status and stat
     assert.equal(line.stdout, '', state);
     const r = cli('status');
     assert.equal(r.status, 0, `${state}: ${r.stderr}`);
-    assert.match(r.stdout, /^Moved your unreadable plan to .*state\.json\.bak-/m, state);
+    assert.match(r.stdout, /^Saved a backup of your old plan\.$/m, state);
     const view = JSON.parse(cli('status', '--json').stdout);
     assert.equal(view.streak, 0, state);
     assert.equal(view.stage, 0, state);
     assert.equal(cli('statusline').stdout, '@ plan your must-dos: /today:plan · streak 0\n', state);
   }
+});
+
+test('state with a bad task entry is moved aside: statusline silent, status starts fresh with the notice', () => {
+  const today = new Date().toLocaleDateString('sv');
+  const ok = { text: 'a', category: 'dx', done: false };
+  for (const tasks of [
+    [{}],
+    ['x'],
+    [1],
+    [null],
+    [ok, { ...ok, text: null }],
+    [{ ...ok, category: 1 }],
+    [{ ...ok, done: 'no' }],
+  ]) {
+    const cli = inHome(workHome({ 'state.json': JSON.stringify({ date: today, tasks }) }));
+    const line = cli('statusline');
+    assert.deepEqual([line.status, line.stdout, line.stderr], [0, '', ''], JSON.stringify(tasks));
+    const r = cli('status');
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^Started fresh\.\nSaved a backup of your old plan\.$/m, JSON.stringify(tasks));
+    assert.deepEqual(JSON.parse(cli('status', '--json').stdout).tasks, []);
+  }
+  const good = inHome(workHome({ 'state.json': JSON.stringify({ date: today, tasks: [ok] }) }))('status').stdout;
+  assert.doesNotMatch(good, /Started fresh/);
+});
+
+test('a relative TODAY_HOME resolves against $HOME, not the cwd', () => {
+  const fakeHome = tempHome();
+  const cwd = tempHome();
+  const r = run(['add', 'dx', 'a'], { cwd, env: { ...process.env, HOME: fakeHome, TODAY_HOME: 'rel' } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(fakeHome, 'rel', 'state.json')));
+  assert.deepEqual(fs.readdirSync(cwd), []);
 });
 
 test('edit names what the user typed and rejects an unknown change', () => {
@@ -424,6 +460,22 @@ test('slash command descriptions say one thing per sentence', () => {
   for (const name of fs.readdirSync(dir)) {
     const [, desc] = fs.readFileSync(path.join(dir, name), 'utf8').match(/^description: (.+)$/m);
     assert.doesNotMatch(desc, /\band\b/, name);
+  }
+});
+
+test('README Use bullets and the off and on descriptions start with a verb and hold one idea', () => {
+  const VERBS = ['Pick', 'Shows', 'Mark', 'Leave', 'Take', 'Pauses', 'Keeps', 'Undo', 'Walk'];
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const use = readme.split('## Use\n')[1].split('\n## ')[0];
+  const bullets = use.split('\n').filter(l => /^\s*- /.test(l));
+  assert.ok(bullets.length >= 5, use);
+  const descs = ['off.md', 'on.md'].map(
+    name => fs.readFileSync(path.join(root, 'commands', name), 'utf8').match(/^description: (.+)$/m)[1],
+  );
+  for (const line of [...bullets.map(l => l.replace(/^\s*- /, '')), ...descs]) {
+    assert.ok(VERBS.includes(line.split(' ')[0]), `not verb first: ${line}`);
+    assert.equal(line.replace(/`[^`]*`/g, '').match(/[.!?](\s|$)/g)?.length, 1, `one sentence: ${line}`);
+    assert.doesNotMatch(line, /\band\b|;/, line);
   }
 });
 
@@ -483,6 +535,22 @@ test('scenario: off silences nudges and session start, statusline shows the reas
   assert.match(cli('nudge').stdout, /^Finish today's must-dos: 1\. a · \d+[hm] left\n$/);
   assert.equal(cli('nudge').stdout, ''); // rate limited
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')).lastNudgeAt);
+});
+
+test('control characters in task text and the off reason never reach the terminal', () => {
+  const raw = 'a\x1b]0;x\x07b\x7f\x9b31m';
+  const noControl = out => assert.doesNotMatch(out.replace(/\n/g, ''), /[\x00-\x1f\x7f-\x9f]/, JSON.stringify(out));
+  const cli = inHome(tempHome({ 'config.json': allDay }));
+  assert.equal(cli('add', 'dx', raw).status, 0);
+  for (const verb of ['status', 'statusline', 'nudge']) {
+    const out = cli(verb).stdout;
+    assert.match(out, /a\]0;xb31m/, verb);
+    noControl(out);
+  }
+  cli('off', raw);
+  const line = cli('statusline').stdout;
+  assert.match(line, /off today · a\]0;xb31m/);
+  noControl(line);
 });
 
 test('off without a reason, on without a day off, and off --json', () => {
@@ -760,6 +828,10 @@ test('plan, status, add and edit text pass voice-check and start with a verb', (
     "Can't",
     'Write',
     'Run',
+    'Ignored',
+    'Using',
+    'Started',
+    'Saved',
   ];
   const dir = workHome();
   const cli = inHome(dir);
@@ -772,6 +844,10 @@ test('plan, status, add and edit text pass voice-check and start with a verb', (
     cli('add', 'fun', 'x').stderr,
     cli('edit', 'x').stderr,
     inHome(tempHome({ 'config.json': days(false) }))('status').stdout,
+    // notices: bad config key, unreadable config, corrupt state
+    inHome(tempHome({ 'config.json': '{"maxTasks":0}', 'state.json': 'x' }))('status').stdout,
+    inHome(tempHome({ 'config.json': '[1]' }))('status').stdout,
+    inHome(tempHome({ 'config.json': '{' }))('status').stdout,
   ];
   for (const out of outs) {
     assert.deepEqual(analyze(out).hard, [], out);
@@ -865,7 +941,7 @@ test('done: already done, ambiguous and unknown exit 1 and change nothing', () =
   cli('done', '2', '--quiet');
   const before = cli('status', '--json').stdout;
   const cases = [
-    [['2'], 'Finished b already.\n'],
+    [['2'], 'Marked done earlier: b.\n'],
     [[], 'Pick which must-do is done: 1 or 3.\nRun today done <n>.\n'],
     [['9'], "Can't find must-do 9.\n"],
   ];
@@ -882,7 +958,7 @@ test('done --json plays nothing and returns the view with allDone and tomorrow',
   assert.deepEqual([v.error, v.allDone, v.tomorrow, v.tasks[0].done, v.creature], [null, true, 3, true, 'Egg']);
   assert.equal(v.message, 'Finished every must-do today.\nStreak will be 3 tomorrow.');
   const again = JSON.parse(cli('done', '1', '--json').stdout);
-  assert.deepEqual([again.error, again.allDone], ['Finished a already.', false]);
+  assert.deepEqual([again.error, again.allDone], ['Marked done earlier: a.', false]);
 });
 
 test('done text passes voice-check and starts with a verb', () => {

@@ -1,5 +1,5 @@
 ---
-description: Take the day off. Pause nudges until tomorrow. Keep your streak.
+description: Take the day off.
 argument-hint: [reason]
 allowed-tools: Bash(node:*)
 ---

@@ -52,7 +52,7 @@ export function normalizeConfig(raw) {
   const config = structuredClone(defaultConfig);
   const warnings = [];
   if (raw == null) return { config, warnings };
-  if (!isObj(raw)) return { config, warnings: ['Ignored config.json. Using defaults.'] };
+  if (!isObj(raw)) return { config, warnings: ['Ignored config.json.\nUsing defaults.'] };
   for (const key of Object.keys(valid)) {
     if (!(key in raw)) continue;
     let v = raw[key];
@@ -60,9 +60,9 @@ export function normalizeConfig(raw) {
     // A day at most: launchd's StartInterval needs a sane integer (1e21 would print as 6e+22).
     if (key === 'nudgeEveryMinutes' && valid[key](v) && v > MAX_NUDGE) {
       config[key] = MAX_NUDGE;
-      warnings.push(`Ignored ${key} in config.json. Using ${plain[key](MAX_NUDGE)}.`);
+      warnings.push(`Ignored ${key} in config.json.\nUsing ${plain[key](MAX_NUDGE)}.`);
     } else if (valid[key](v)) config[key] = structuredClone(v);
-    else warnings.push(`Ignored ${key} in config.json. Using ${plain[key](defaultConfig[key])}.`);
+    else warnings.push(`Ignored ${key} in config.json.\nUsing ${plain[key](defaultConfig[key])}.`);
   }
   return { config, warnings };
 }
@@ -71,8 +71,16 @@ export function normalizeConfig(raw) {
 export const emptyState = () => ({ date: null, tasks: [] });
 // Counters may be missing (older state) but never junk: stages[stage] and the streak line read them unchecked.
 const count = (v, max = Infinity) => v === undefined || (Number.isInteger(v) && v >= 0 && v <= max);
+// Every task is printed and scored unchecked, so one junk entry makes the whole state unreadable.
+const isTask = t =>
+  isObj(t) && typeof t.text === 'string' && typeof t.category === 'string' && typeof t.done === 'boolean';
 export const isValidState = s =>
-  isObj(s) && Array.isArray(s.tasks) && count(s.streak) && count(s.best) && count(s.stage, stages.length - 1);
+  isObj(s) &&
+  Array.isArray(s.tasks) &&
+  s.tasks.every(isTask) &&
+  count(s.streak) &&
+  count(s.best) &&
+  count(s.stage, stages.length - 1);
 
 // ---- Daily plan -------------------------------------------------------------
 // Dates are local 'YYYY-MM-DD' strings supplied by io. Work days use 1 = Monday ... 7 = Sunday.
@@ -124,9 +132,11 @@ export function updateStreak(state, config, yesterday) {
   return next;
 }
 
-const cleanText = t =>
+// Control characters (ESC, BEL, C1 CSI...) would drive the terminal when statusline or a hook prints the text.
+export const cleanText = t =>
   String(t ?? '')
     .replace(/\s+/g, ' ')
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, '')
     .trim();
 const badCategory = (c, config) =>
   `${c ? `Can't use category ${c}.\n` : ''}Pick one of these: ${config.categories.join(', ')}.`;
@@ -177,7 +187,7 @@ export function markDone(state, n, at) {
   }
   const t = Number.isInteger(n) && state.tasks[n - 1];
   if (!t) return fail(`Can't find must-do ${n}.`);
-  if (t.done) return fail(`Finished ${t.text} already.`);
+  if (t.done) return fail(`Marked done earlier: ${t.text}.`);
   const tasks = state.tasks.map((x, i) => (i === n - 1 ? { ...x, done: true, doneAt: at } : x));
   return { state: { ...state, tasks }, error: null, allDone: open.length === 1 };
 }

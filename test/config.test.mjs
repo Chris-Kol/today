@@ -24,8 +24,8 @@ test('scenario: invalid value falls back for that key only, one warning', () => 
   assert.equal(config.quiet, true);
   assert.deepEqual(config.categories, ['work']);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /^Ignored maxTasks/);
-  assert.ok(!warnings[0].includes('\n'));
+  // One warning, one idea per line (voice rule 2).
+  assert.equal(warnings[0], 'Ignored maxTasks in config.json.\nUsing up to 3 must-dos.');
 });
 
 test('invalid work hours fall back to default work hours', () => {
@@ -61,7 +61,7 @@ test('nudgeEveryMinutes above a day is capped at 1440, so the plist integer stay
   for (const v of [1441, 1e21]) {
     const { config, warnings } = normalizeConfig({ nudgeEveryMinutes: v });
     assert.equal(config.nudgeEveryMinutes, 1440, String(v));
-    assert.deepEqual(warnings, ['Ignored nudgeEveryMinutes in config.json. Using a nudge every 1440 minutes.']);
+    assert.deepEqual(warnings, ['Ignored nudgeEveryMinutes in config.json.\nUsing a nudge every 1440 minutes.']);
   }
   assert.deepEqual(normalizeConfig({ nudgeEveryMinutes: 1440 }), {
     config: { ...defaultConfig, nudgeEveryMinutes: 1440 },
@@ -88,7 +88,7 @@ test('maxTasks rejects 0, non-integers, and non-numbers', () => {
 test('non-object config uses defaults with one warning', () => {
   const { config, warnings } = normalizeConfig([1, 2]);
   assert.deepEqual(config, defaultConfig);
-  assert.equal(warnings.length, 1);
+  assert.deepEqual(warnings, ['Ignored config.json.\nUsing defaults.']);
 });
 
 test('warnings state the default in plain words, no JSON', () => {
@@ -101,11 +101,11 @@ test('warnings state the default in plain words, no JSON', () => {
     carryOver: 1,
   });
   assert.deepEqual(warnings, [
-    'Ignored categories in config.json. Using company, dx.',
-    'Ignored workHours in config.json. Using 09:00 to 18:00, Monday to Friday.',
-    'Ignored nudgeEveryMinutes in config.json. Using a nudge every 45 minutes.',
-    'Ignored maxTasks in config.json. Using up to 3 must-dos.',
-    'Ignored quiet in config.json. Using the done animation.',
-    'Ignored carryOver in config.json. Using carry-over for unfinished must-dos.',
+    'Ignored categories in config.json.\nUsing company, dx.',
+    'Ignored workHours in config.json.\nUsing 09:00 to 18:00, Monday to Friday.',
+    'Ignored nudgeEveryMinutes in config.json.\nUsing a nudge every 45 minutes.',
+    'Ignored maxTasks in config.json.\nUsing up to 3 must-dos.',
+    'Ignored quiet in config.json.\nUsing the done animation.',
+    'Ignored carryOver in config.json.\nUsing carry-over for unfinished must-dos.',
   ]);
 });

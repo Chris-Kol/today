@@ -21,7 +21,7 @@ test('scenario: already done says so in one line and changes nothing', () => {
   const r = markDone(state, 2, AT);
   assert.equal(r.state, state);
   assert.equal(r.allDone, false);
-  assert.equal(r.error, 'Finished b already.');
+  assert.equal(r.error, 'Marked done earlier: b.');
   assert.doesNotMatch(r.error, /\n/);
 });
 

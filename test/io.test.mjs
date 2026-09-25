@@ -14,6 +14,8 @@ beforeEach(() => {
 
 test('home() honors TODAY_HOME, else ~/.today', () => {
   assert.equal(home(), dir);
+  process.env.TODAY_HOME = 'rel/x';
+  assert.equal(home(), path.join(os.homedir(), 'rel', 'x'));
   delete process.env.TODAY_HOME;
   assert.equal(home(), path.join(os.homedir(), '.today'));
 });
@@ -39,7 +41,7 @@ test('unparseable config uses defaults with one warning', () => {
   fs.writeFileSync(path.join(dir, 'config.json'), '{ nope');
   const { config, warnings } = readConfig();
   assert.deepEqual(config, defaultConfig);
-  assert.equal(warnings.length, 1);
+  assert.deepEqual(warnings, ["Can't read config.json.\nUsing defaults."]);
 });
 
 test('fresh start: no state file gives empty state, no notice, no file', () => {
@@ -54,16 +56,16 @@ test('state round trip', () => {
   assert.deepEqual(fs.readdirSync(dir), ['state.json']);
 });
 
-test('scenario: corrupt state moves aside, starts fresh, one-line notice once', () => {
+test('scenario: corrupt state moves aside, starts fresh, notice once', () => {
   fs.writeFileSync(path.join(dir, 'state.json'), '{ broken');
   const now = new Date('2026-09-24T10:11:12.345Z');
   const { state, notice } = readState(now);
   const bak = 'state.json.bak-2026-09-24T10-11-12-345Z';
   assert.equal(fs.readFileSync(path.join(dir, bak), 'utf8'), '{ broken');
-  assert.equal(notice, `Moved your unreadable plan to ${path.join(dir, bak)}.`);
-  assert.ok(!notice.includes('\n'));
-  // Fresh state keeps the notice waiting for the next command the user runs; the file is not moved again.
-  assert.deepEqual(state, { ...emptyState(), notices: [notice] });
+  assert.equal(notice, 'Started fresh.\nSaved a backup of your old plan.');
+  // Fresh state keeps the notice (and the backup path, for --json) waiting for the next command the user runs;
+  // the file is not moved again.
+  assert.deepEqual(state, { ...emptyState(), notices: [notice], backup: path.join(dir, bak) });
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), state);
   assert.deepEqual(readState(), { state, notice: null });
 });

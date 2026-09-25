@@ -16,11 +16,15 @@ Restart Claude Code. Needs Node 22 or newer. No other dependencies.
 
 ## Use
 
-- `/today:plan` picks the day's must-dos, or shows them if the day is planned.
-- `/today:done [n]` marks a must-do done. Leave out `n` if only one is open.
-- `/today:off [reason]` takes the day off. Nudges pause until tomorrow. Your streak stays.
-
-`/today:edit` walks the day's list. `/today:on` undoes a day off.
+- Pick the day's must-dos with `/today:plan`.
+  - Shows them instead once the day is planned.
+- Mark a must-do done with `/today:done [n]`.
+  - Leave out `n` if only one is open.
+- Take the day off with `/today:off [reason]`.
+  - Pauses nudges until tomorrow.
+  - Keeps your streak.
+- Undo a day off with `/today:on`.
+- Walk the day's list with `/today:edit`.
 
 A new session shows the day's must-dos. Prompts get a nudge every 45 minutes during work hours while a must-do is open.
 
