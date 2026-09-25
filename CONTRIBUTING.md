@@ -15,6 +15,7 @@ Needs Node 22 or newer. CI runs Node 22 and 24.
 - **Pure core.** Logic lives in `src/core.mjs`: plain objects in, new objects out, no clock and no fs. Files, the clock and the PATH live in `src/io.mjs`.
 - **Write every string in the voice.** Follow [docs/voice.md](docs/voice.md): verb first, one idea per line, no jargon, never shame, one small joke per screen at most.
 - **Test first.** Add a `node --test` case under `test/` that fails, then make it pass.
+- **Conventional commits and branches.** Commits: `type(scope)?: subject` (types: `feat fix docs spec test refactor style ci chore release`). Branches: `factory/<change>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`, `release/vX.Y.Z`. PR titles follow the commit format. `scripts/guard.mjs` enforces both.
 
 ## Add a suggestion source later
 

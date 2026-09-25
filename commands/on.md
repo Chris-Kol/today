@@ -1,5 +1,5 @@
 ---
-description: Undo a day off. Resume nudges for the rest of today.
+description: Undo a day off.
 allowed-tools: Bash(node:*)
 ---
 Run `node "${CLAUDE_PLUGIN_ROOT}/bin/today.mjs" on`.

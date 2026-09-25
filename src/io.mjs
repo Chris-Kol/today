@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { normalizeConfig, emptyState, isValidState, rollover, localDate } from './core.mjs';
 
-export const home = () => process.env.TODAY_HOME || path.join(os.homedir(), '.today');
+// A relative TODAY_HOME is taken from $HOME: hooks run in the user's project, and launchd runs with cwd /.
+export const home = () => path.resolve(os.homedir(), process.env.TODAY_HOME || '.today');
 const file = name => path.join(home(), name);
 
 // Never creates config.json; that file belongs to the user.
@@ -21,7 +22,7 @@ export function readConfig() {
     const found = e.code !== 'ENOENT';
     return {
       ...normalizeConfig(undefined),
-      warnings: found ? ["Can't read config.json. Using defaults."] : [],
+      warnings: found ? ["Can't read config.json.\nUsing defaults."] : [],
       found,
       readable: false,
     };
@@ -92,9 +93,10 @@ export function readState(now = new Date()) {
         } catch {
           return cantMove;
         }
-        const notice = `Moved your unreadable plan to ${bak}.`;
+        const notice = 'Started fresh.\nSaved a backup of your old plan.';
         // The notice waits in state until a command the user runs shows it, so a silent statusline read can't lose it.
-        const state = { ...emptyState(), notices: [notice] };
+        // The backup path rides along for --json only; the printed line leaves it out.
+        const state = { ...emptyState(), notices: [notice], backup: bak };
         try {
           writeState(state);
         } catch {
@@ -248,7 +250,8 @@ export function notify(text) {
 
 // ---- Daemon (opt-in reminders outside Claude Code) ------------------------------
 // A generated file, not a process we own. It runs `node <abs>/bin/today.mjs nudge --notify` on a timer.
-// TODAY_DAEMON_DIR moves the files (tests); the real locations are the ones launchd and systemd read.
+// TODAY_DAEMON_DIR is a test hook: it moves the files and skips launchctl/systemctl, so a test never loads a
+// temp job into the real user session. The real locations are the ones launchd and systemd read.
 const LABEL = 'dev.today.nudge';
 const UNIT = 'today-nudge';
 const SCRIPT = fileURLToPath(new URL('../bin/today.mjs', import.meta.url));
@@ -272,7 +275,7 @@ const sdqExec = s => sdq(s).split('$').join('$$');
 const unsdq = s => s.slice(1, -1).replace(/\$\$/g, '$').replace(/%%/g, '%').replace(/\\(.)/g, '$1');
 
 function daemonText(platform, minutes) {
-  const todayHome = process.env.TODAY_HOME;
+  const todayHome = process.env.TODAY_HOME && home();
   if (platform === 'darwin') {
     const env = todayHome
       ? `  <key>EnvironmentVariables</key>\n  <dict>\n    <key>TODAY_HOME</key>\n    <string>${xml(todayHome)}</string>\n  </dict>\n`
@@ -352,6 +355,7 @@ const noScheduler = {
   lines: ["Can't schedule reminders outside Claude Code.", 'Use macOS or Linux with systemd to turn them on.'],
 };
 const launchTarget = () => `gui/${process.getuid()}`;
+const skipped = tool => (process.env.TODAY_DAEMON_DIR ? `Skipped ${tool}: TODAY_DAEMON_DIR is set.` : null);
 
 // -> {ok, lines}. Replaces an earlier install, so running it again picks up a new path or interval.
 export function daemonInstall(minutes, platform = process.platform) {
@@ -366,11 +370,12 @@ export function daemonInstall(minutes, platform = process.platform) {
   daemonText(platform, minutes).forEach((text, i) => {
     fs.writeFileSync(files[i], text);
   });
+  const wrote = files.map(f => `Wrote ${f}.`);
+  if (skipped(tool)) return { ok: true, lines: [...wrote, skipped(tool)] };
   const loaded =
     platform === 'darwin'
       ? (tryRun(tool, ['bootout', `${launchTarget()}/${LABEL}`]), tryRun(tool, ['bootstrap', launchTarget(), files[0]]))
       : tryRun(tool, ['--user', 'daemon-reload']) && tryRun(tool, ['--user', 'enable', '--now', `${UNIT}.timer`]);
-  const wrote = files.map(f => `Wrote ${f}.`);
   if (!loaded)
     return { ok: false, lines: [...wrote, `Can't load it with ${tool}.`, 'Run today daemon remove to undo it.'] };
   return {
@@ -390,9 +395,11 @@ export function daemonRemove(platform = process.platform) {
   if (!tool) return noScheduler;
   const files = daemonFiles(platform).filter(f => fs.existsSync(f));
   if (!files.length) return { ok: true, lines: ['Found no reminders outside Claude Code to remove.'] };
-  if (platform === 'darwin') tryRun(tool, ['bootout', `${launchTarget()}/${LABEL}`]);
-  else tryRun(tool, ['--user', 'disable', '--now', `${UNIT}.timer`]);
+  const skip = skipped(tool);
+  if (!skip && platform === 'darwin') tryRun(tool, ['bootout', `${launchTarget()}/${LABEL}`]);
+  if (!skip && platform !== 'darwin') tryRun(tool, ['--user', 'disable', '--now', `${UNIT}.timer`]);
   for (const f of files) fs.rmSync(f, { force: true });
-  if (platform !== 'darwin') tryRun(tool, ['--user', 'daemon-reload']);
-  return { ok: true, lines: ['Turned off reminders outside Claude Code.', ...files.map(f => `Deleted ${f}.`)] };
+  if (!skip && platform !== 'darwin') tryRun(tool, ['--user', 'daemon-reload']);
+  const deleted = files.map(f => `Deleted ${f}.`);
+  return { ok: true, lines: skip ? [...deleted, skip] : ['Turned off reminders outside Claude Code.', ...deleted] };
 }

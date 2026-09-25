@@ -14,7 +14,17 @@ import {
   daemonRemove,
   daemonPaths,
 } from '../src/io.mjs';
-import { addTask, editList, markDone, todayView, updateStreak, nudge, sessionStart, isWorkDay } from '../src/core.mjs';
+import {
+  addTask,
+  cleanText,
+  editList,
+  markDone,
+  todayView,
+  updateStreak,
+  nudge,
+  sessionStart,
+  isWorkDay,
+} from '../src/core.mjs';
 import { stages } from '../src/creature.mjs';
 import * as animate from '../src/animate.mjs';
 
@@ -37,18 +47,20 @@ Finish them to keep your streak.
   doctor                  Check your setup
 `;
 
+const indent = text => `  ${text.replaceAll('\n', '\n  ')}`;
+
 function doctor() {
   const out = ['Check settings'];
   const { warnings, found, readable } = readConfig();
   if (readable) out.push(`  Read ${path.join(home(), 'config.json')}.`);
   else if (!found) out.push('  Found no config.json.\n  Using defaults.');
-  for (const w of warnings) out.push(`  ${w}`);
+  for (const w of warnings) out.push(indent(w));
 
   out.push('Check saved plan');
   const stateFile = path.join(home(), 'state.json');
   const exists = fs.existsSync(stateFile);
   const { state, notice } = readState();
-  out.push(`  ${notice ?? (exists ? `Read ${stateFile}.` : 'Found no saved plan yet.')}`);
+  out.push(indent(notice ?? (exists ? `Read ${stateFile}.` : 'Found no saved plan yet.')));
   if (notice && state.notices) {
     // shown now, so the next command does not repeat it
     try {
@@ -88,7 +100,7 @@ function save(state, fn) {
 }
 const clearNotices = s => {
   if (!s.notices) return { state: s };
-  const { notices: _, ...rest } = s;
+  const { notices: _, backup: __, ...rest } = s;
   return { state: rest };
 };
 
@@ -130,12 +142,13 @@ function parseEdit(args) {
 function loadShown() {
   let { config, warnings, notice, today, state } = load();
   const notices = [...new Set([notice, ...(state.notices ?? []), ...warnings])].filter(Boolean);
+  const { backup } = state; // where a corrupt plan went: --json only
   if (state.notices) state = save(state, clearNotices).state; // shown now, so clear the ones a statusline read left waiting
-  return { config, today, state, notices };
+  return { config, today, state, notices, backup };
 }
 
 function planVerb(cmd, args, json) {
-  let { config, today, state, notices } = loadShown();
+  let { config, today, state, notices, backup } = loadShown();
   let error = null;
   let head = [];
   if (cmd === 'add' || (cmd === 'edit' && args.length)) {
@@ -155,13 +168,13 @@ function planVerb(cmd, args, json) {
   }
   const v = todayView(state, config, today);
   if (error) process.exitCode = 1;
-  if (json) return process.stdout.write(JSON.stringify({ ...v, error, notices }) + '\n');
+  if (json) return process.stdout.write(JSON.stringify({ ...v, error, notices, backup }) + '\n');
   if (error) return process.stderr.write([...notices, error].join('\n') + '\n');
   process.stdout.write([...notices, ...head, ...render(v)].join('\n') + '\n');
 }
 
 async function doneVerb(args, json, quiet) {
-  let { config, today, state, notices } = loadShown();
+  let { config, today, state, notices, backup } = loadShown();
   const raw = args[0];
   const r = save(state, s => ({
     ...markDone(s, raw === undefined ? null : /^\d+$/.test(raw) ? Number(raw) : raw, new Date().toISOString()),
@@ -176,7 +189,7 @@ async function doneVerb(args, json, quiet) {
   if (r.error) process.exitCode = 1;
   if (json)
     return process.stdout.write(
-      JSON.stringify({ ...v, error: r.error, notices, allDone: r.allDone, tomorrow, message }) + '\n',
+      JSON.stringify({ ...v, error: r.error, notices, backup, allDone: r.allDone, tomorrow, message }) + '\n',
     );
   if (r.error) return process.stderr.write([...notices, r.error].join('\n') + '\n');
   if (notices.length) process.stdout.write(notices.join('\n') + '\n');
@@ -222,8 +235,8 @@ function hook(cmd, notifyOut) {
 
 // off [reason] / on. The flag lives in state; rollover clears it at the next day.
 function offVerb(cmd, args, json) {
-  let { config, today, state, notices } = loadShown();
-  const reason = args.join(' ').replace(/\s+/g, ' ').trim();
+  let { config, today, state, notices, backup } = loadShown();
+  const reason = cleanText(args.join(' '));
   let lines;
   if (cmd === 'off') {
     state = save(state, s => ({ state: { ...s, off: reason || true } })).state;
@@ -244,7 +257,7 @@ function offVerb(cmd, args, json) {
   }
   const v = todayView(state, config, today);
   if (!lines) lines = [...(v.workDay ? ['Resumed nudges for today.'] : []), ...render(v)];
-  if (json) return process.stdout.write(JSON.stringify({ ...v, notices }) + '\n');
+  if (json) return process.stdout.write(JSON.stringify({ ...v, notices, backup }) + '\n');
   process.stdout.write([...notices, ...lines].join('\n') + '\n');
 }
 
