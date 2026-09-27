@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { home, readConfig, readState, writeState, appendHistory, hasTool } from '../src/io.mjs';
+import {
+  home,
+  readConfig,
+  readState,
+  writeState,
+  appendHistory,
+  hasTool,
+  readHistory,
+  writeDashboard,
+  openFile,
+} from '../src/io.mjs';
 import { defaultConfig, emptyState } from '../src/core.mjs';
 
 let dir;
@@ -139,4 +149,34 @@ test('hasTool skips empty PATH entries and directories', () => {
     process.chdir(cwd);
     process.env.PATH = oldPath;
   }
+});
+
+test('readHistory: [] when missing; raw lines, file bytes unchanged', () => {
+  assert.deepEqual(readHistory(), []);
+  const p = path.join(dir, 'history.jsonl');
+  const text = '{"date":"2026-09-21","tasks":[]}\n{oops\n';
+  fs.writeFileSync(p, text);
+  const before = fs.readFileSync(p);
+  assert.deepEqual(readHistory(), ['{"date":"2026-09-21","tasks":[]}', '{oops']);
+  assert.ok(fs.readFileSync(p).equals(before));
+});
+
+test('writeDashboard replaces an earlier file and leaves no .tmp- file', () => {
+  const p = writeDashboard('<p>one</p>');
+  assert.equal(p, path.join(dir, 'dashboard.html'));
+  writeDashboard('<p>two</p>');
+  assert.equal(fs.readFileSync(p, 'utf8'), '<p>two</p>');
+  assert.deepEqual(fs.readdirSync(dir), ['dashboard.html']);
+});
+
+test('openFile returns false with an empty PATH or an unknown platform', () => {
+  const saved = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    assert.equal(openFile(path.join(dir, 'dashboard.html'), 'darwin'), false);
+    assert.equal(openFile(path.join(dir, 'dashboard.html'), 'linux'), false);
+  } finally {
+    process.env.PATH = saved;
+  }
+  assert.equal(openFile(path.join(dir, 'dashboard.html'), 'win32'), false);
 });

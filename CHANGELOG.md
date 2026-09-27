@@ -4,6 +4,12 @@ Every release of today, newest first.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions below 1.0.0 are pre-releases.
 
+## [0.2.0] - 2026-09-27
+
+### Added
+
+- v2 insight — stats, year grid, dashboard ([#40](https://github.com/Chris-Kol/today-workshop/pull/40))
+
 ## [0.1.2] - 2026-09-25
 
 ### Added

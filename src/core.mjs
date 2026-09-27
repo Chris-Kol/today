@@ -90,7 +90,7 @@ export const isWorkDay = (date, config) =>
 
 export const glyphFor = stage => stages[stage].glyph;
 
-const addDays = (date, n) => new Date(Date.parse(`${date}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+export const addDays = (date, n) => new Date(Date.parse(`${date}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 // ---- Streak and creature ----------------------------------------------------
 

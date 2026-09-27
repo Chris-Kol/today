@@ -144,6 +144,43 @@ export function appendHistory(line) {
   fs.appendFileSync(file('history.jsonl'), JSON.stringify(line) + '\n');
 }
 
+// Raw lines for stats.mjs to parse; [] when there is no history yet. Never writes.
+export function readHistory() {
+  let text;
+  try {
+    text = fs.readFileSync(file('history.jsonl'), 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  }
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+// Temp file then rename, like writeRaw: a reader never sees half a page. Returns the path.
+export function writeDashboard(html) {
+  fs.mkdirSync(home(), { recursive: true });
+  const p = file('dashboard.html');
+  const tmp = `${p}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, html);
+  fs.renameSync(tmp, p);
+  return p;
+}
+
+// The path is one argv entry, never a shell word. Both openers return once the browser is asked.
+// Missing opener, non-zero exit, timeout or another platform: false.
+export function openFile(p, platform = process.platform) {
+  const opener = { darwin: 'open', linux: 'xdg-open' }[platform];
+  if (!opener) return false;
+  try {
+    execFileSync(opener, [p], { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const hasTool = name =>
   (process.env.PATH || '')
     .split(path.delimiter)
