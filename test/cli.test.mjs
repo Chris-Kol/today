@@ -43,6 +43,7 @@ test('each help and unknown-command line starts with a verb', () => {
     'Undo',
     'Check',
     'Schedule',
+    'Write',
   ];
   const lines = (run('--help').stdout + run('nope').stderr).split('\n').filter(l => l.trim());
   for (const line of lines) {
@@ -464,7 +465,7 @@ test('slash command descriptions say one thing per sentence', () => {
 });
 
 test('README Use bullets and the off and on descriptions start with a verb and hold one idea', () => {
-  const VERBS = ['Pick', 'Shows', 'Mark', 'Leave', 'Take', 'Pauses', 'Keeps', 'Undo', 'Walk'];
+  const VERBS = ['Pick', 'Shows', 'Mark', 'Leave', 'Take', 'Pauses', 'Keeps', 'Undo', 'Walk', 'Show', 'Open'];
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
   const use = readme.split('## Use\n')[1].split('\n## ')[0];
   const bullets = use.split('\n').filter(l => /^\s*- /.test(l));
@@ -863,13 +864,16 @@ test('plan, status, add and edit text pass voice-check and start with a verb', (
 test('slash commands pass voice-check and call only verbs the CLI knows', () => {
   const dir = fileURLToPath(new URL('../commands/', import.meta.url));
   const names = fs.readdirSync(dir).sort();
-  assert.deepEqual(names, ['done.md', 'edit.md', 'off.md', 'on.md', 'plan.md']);
+  assert.deepEqual(names, ['dashboard.md', 'done.md', 'edit.md', 'off.md', 'on.md', 'plan.md', 'stats.md']);
   for (const name of names) {
     const md = fs.readFileSync(path.join(dir, name), 'utf8');
     assert.match(md, /^---\ndescription: .+\n/, name);
     assert.deepEqual(analyze(md.replace(/^!`/gm, '`')).hard, [], name); // !`cmd` runs a command, not prose
     for (const [, verb] of md.matchAll(/today\.mjs" (\w+)/g)) {
-      assert.ok(['plan', 'status', 'add', 'edit', 'off', 'on', 'done'].includes(verb), `${name}: ${verb}`);
+      assert.ok(
+        ['plan', 'status', 'add', 'edit', 'off', 'on', 'done', 'stats', 'dashboard'].includes(verb),
+        `${name}: ${verb}`,
+      );
     }
   }
 });

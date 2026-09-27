@@ -25,8 +25,24 @@ Restart Claude Code. Needs Node 22 or newer. No other dependencies.
   - Keeps your streak.
 - Undo a day off with `/today:on`.
 - Walk the day's list with `/today:edit`.
+- Show your stats with `/today:stats`.
+- Open your stats page with `/today:dashboard`.
 
 A new session shows the day's must-dos. Prompts get a nudge every 45 minutes during work hours while a must-do is open.
+
+## Stats
+
+Run `/today:stats` to see what your history says:
+
+- Done must-dos per category, for the last week, the last month, all time.
+- How many planned days ended with every must-do done.
+- Your streak.
+- Your days off.
+- A grid of the last 53 weeks.
+
+Run `/today:dashboard` to write the same stats to one HTML page, then open it. The page lists every day with its must-dos. It holds no script. It loads nothing from the network.
+
+From a shell, run `today stats`, `today stats --json` or `today dashboard --open`. The page lives at `dashboard.html` next to your history. The tool never changes your history. It skips a line it can't read with one notice.
 
 ## Statusline
 

@@ -13,6 +13,9 @@ import {
   daemonInstall,
   daemonRemove,
   daemonPaths,
+  readHistory,
+  writeDashboard,
+  openFile,
 } from '../src/io.mjs';
 import {
   addTask,
@@ -27,6 +30,9 @@ import {
 } from '../src/core.mjs';
 import { stages } from '../src/creature.mjs';
 import * as animate from '../src/animate.mjs';
+import { computeStats } from '../src/stats.mjs';
+import { gridCells, gridText } from '../src/render/grid.mjs';
+import { dashboardHtml, summaryLines } from '../src/render/html.mjs';
 
 const HELP = `Run today <command>.
 
@@ -41,6 +47,8 @@ Finish them to keep your streak.
   statusline              Show the one-line summary
   off [reason]            Take today off
   on                      Undo a day off
+  stats [--json]          Show your history in numbers
+  dashboard [--open]      Write your stats to an HTML page
   nudge [--notify]        Show a nudge when one is due
   session-start           Show the line for a new session
   daemon install|remove   Schedule reminders outside Claude Code
@@ -261,6 +269,56 @@ function offVerb(cmd, args, json) {
   process.stdout.write([...notices, ...lines].join('\n') + '\n');
 }
 
+const EMPTY_STATS = 'Check back after your first planned day to see stats.';
+
+// Category rows: last 7 days, last 30 days, all time. Names are padded to the longest.
+function categoryLines({ names, week, month, all }) {
+  const w = Math.max('category'.length, ...names.map(n => n.length));
+  const row = (a, b, c, d) => `  ${a.padEnd(w)}  ${b.padStart(6)}  ${c.padStart(7)}  ${d.padStart(8)}`;
+  return [
+    'Counted done must-dos by category.',
+    row('category', '7 days', '30 days', 'all time'),
+    ...names.map(n => row(n, String(week[n]), String(month[n]), String(all[n]))),
+  ];
+}
+
+// stats [--json] / dashboard [--open]. Read-only over history.jsonl; empty history is one line, exit 0.
+// Throws only on a read; a failed state save or dashboard write reports itself.
+function insightVerb(cmd, args, json) {
+  let shown;
+  try {
+    shown = loadShown();
+  } catch {
+    process.stderr.write("Can't save your plan.\nRun today doctor to check your setup.\n");
+    process.exitCode = 1;
+    return;
+  }
+  const { config, today, state, notices, backup } = shown;
+  const stats = computeStats(readHistory(), state, config, today);
+  if (cmd === 'stats' && json) return process.stdout.write(JSON.stringify({ ...stats, notices, backup }) + '\n');
+  const out = (...lines) => process.stdout.write([...notices, ...lines].join('\n') + '\n');
+  if (stats.skipped) notices.push(`Skipped ${plural(stats.skipped, 'unreadable history line')}.`);
+  if (stats.empty) return out(EMPTY_STATS);
+  if (cmd === 'stats')
+    return out(
+      ...summaryLines(stats),
+      '',
+      ...categoryLines(stats.categories),
+      '',
+      gridText(gridCells(stats.days, today)),
+    );
+  let p;
+  try {
+    p = writeDashboard(dashboardHtml(stats, today));
+  } catch {
+    process.stderr.write("Can't write the dashboard.\nRun today doctor to check your setup.\n");
+    process.exitCode = 1;
+    return;
+  }
+  const opened = args.includes('--open') && openFile(p);
+  out(`Wrote ${p}.`, ...(opened ? [] : ['Open it in your browser.']));
+}
+
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');
 const quiet = argv.includes('--quiet');
@@ -292,6 +350,13 @@ if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') {
     offVerb(cmd, args, json);
   } catch {
     process.stderr.write("Can't save your plan.\nRun today doctor to check your setup.\n");
+    process.exitCode = 1;
+  }
+} else if (cmd === 'stats' || cmd === 'dashboard') {
+  try {
+    insightVerb(cmd, args, json);
+  } catch {
+    process.stderr.write("Can't read your history.\nRun today doctor to check your setup.\n");
     process.exitCode = 1;
   }
 } else if (cmd === 'daemon' && ['install', 'remove'].includes(args[0])) {
